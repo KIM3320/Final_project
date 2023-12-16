@@ -34,7 +34,6 @@ View(datos_empleo_genero)
 datos_libertad <- read_csv("datos_libertad.csv")
 View(datos_libertad)
 ```
-
 ```{r}
 ui <- dashboardPage(
   skin = "blue",
@@ -53,7 +52,7 @@ ui <- dashboardPage(
       tabItem(tabName = "Paises",
               fluidRow(
                 box(
-                  title = "Mapa de CR",
+                  title = "Mapa",
                   leafletOutput("MAPA_COSTA_RICA", width = "100%", height = 500)
                 )
               )
@@ -66,7 +65,8 @@ ui <- dashboardPage(
                 ),
                 box(
                   title = "empleadoras mujeres",
-                  plotlyOutput("plot_empleadoras_mujeres")
+                  plotlyOutput("plot_empleadoras_mujeres"),
+                  gt_output("tabla_empleadoras_mujeres")
                 )
               )
       ),
@@ -90,53 +90,215 @@ ui <- dashboardPage(
   )
 )
 
+# Definir el servidor
 server <- function(input, output, session) {
+  
   observe({
-    updateSelectInput(session, "pais", choices = unique(datos_libertad$pais))
+    updateSelectInput(session, "pais", 
+                      choices = unique(datos_libertad$country))
   })
-
+  
   output$MAPA_COSTA_RICA <- renderLeaflet({
-    # Puedes agregar el código necesario para el mapa de Costa Rica
+    leaflet(data = countries)  |>
+      addTiles()  |>
+      addMarkers(lat = ~as.numeric(Latitude), 
+                 lng = ~as.numeric(Longitude), 
+                 popup = ~countries)
   })
-
+  
   generate_plot <- function(dataType, title) {
     req(input$pais, input$anio, input$dataType)
-
-    selected_variable <- if (input$dataType == "Puntaje") {
-      paste0("libertad_", tolower(dataType), "_puntaje")
-    } else {
-      paste0("libertad_", tolower(dataType), "_ranking")
-    }
-
-    data_filtered <- datos_libertad[datos_libertad$pais == input$pais &
-                                       datos_libertad$anio >= input$anio[1] &
-                                       datos_libertad$anio <= input$anio[2], ]
-
-    ggplot(data_filtered, aes(x = anio, y = .data[[selected_variable]])) +
+    
+    data_filtered <- datos_libertad[datos_libertad$country == input$pais & 
+                                      datos_libertad$anio >= input$anio[1] &
+                                      datos_libertad$anio <= input$anio[2], ]
+    ggplot(data_filtered, aes(x = anio, y = get(dataType))) +
       geom_line(color = "blue", size = 2) +
-      theme_minimal() +
-      ggtitle(title)
+      theme_minimal()
   }
-
-  output$plot_libertad_humana <- renderPlotly({
+  
+  output$plot_empleadores_hombres <- renderPlotly({
+    req(input$pais, input$anio)
+    
+    data_filtered <- datos_empleo_genero[datos_empleo_genero$country == input$pais &
+                                            datos_empleo_genero$anio == input$anio &
+                                            datos_empleo_genero$gender == "empleadores hombres", ]
+    
+    # Tu código para crear el gráfico plotly con empleadores hombres
+    # Puedes usar funciones de plotly, ggplot2, u otro paquete de gráficos aquí
+  })
+  
+  output$plot_empleadoras_mujeres <- renderPlotly({
+    req(input$pais, input$anio)
+    
+    data_filtered <- datos_empleo_genero[datos_empleo_genero$country == input$pais &
+                                            datos_empleo_genero$anio == input$anio &
+                                            datos_empleo_genero$gender == "empleadoras mujeres", ]
+    
+    # Tu código para crear el gráfico plotly con empleadoras mujeres
+    # Puedes usar funciones de plotly, ggplot2, u otro paquete de gráficos aquí
+  })
+  
+  # Agregamos la tabla solo con empleadoras mujeres
+  output$tabla_empleadoras_mujeres <- render_gt({
+    req(input$pais, input$anio)
+    
+    data_filtered <- datos_empleo_genero[datos_empleo_genero$country == input$pais &
+                                            datos_empleo_genero$anio == input$anio &
+                                            datos_empleo_genero$gender == "mujeres", ]
+    
+    data_filtered |> gt()  |> tab_header(title = "Empleadoras Mujeres")
+  })
+  
+  output$plot_libertad_humana <- renderPlot({
     generate_plot("Humana", "Libertad Humana")
   })
-
-  output$plot_libertad_personal <- renderPlotly({
+  
+  output$plot_libertad_personal <- renderPlot({
     generate_plot("Personal", "Libertad Personal")
   })
-
-  output$plot_libertad_economica <- renderPlotly({
+  
+  output$plot_libertad_economica <- renderPlot({
     generate_plot("Economica", "Libertad Económica")
   })
 }
 
+# Lanzar la aplicación Shiny
 shinyApp(ui, server)
-
 ```
 
 
+```{r}
 
+ui <- dashboardPage(
+  skin = "blue",
+  dashboardHeader(title = "Datos varios"),
+  dashboardSidebar(
+    autoWaiter(),
+    sidebarMenu(
+      menuItem("countries", tabName = "Paises", icon = icon("country")),
+      menuItem("datos_empleo_genero", tabName = "Empleo", icon = icon("datos_empleo_genero")),
+      menuItem("datos_libertad", tabName = "Libertades", icon = icon("datos_libertad"))
+    )
+  ),
+  dashboardBody(
+    tags$head(tags$link(rel = "stylesheet", type = "text/css", href = "style.css")),
+    tabItems(
+      tabItem(tabName = "Paises",
+              fluidRow(
+                box(
+                  title = "Mapa",
+                  leafletOutput("MAPA_COSTA_RICA", width = "100%", height = 500)
+                )
+              )
+      ),
+      tabItem(tabName = "Empleo",
+              fluidRow(
+                box(
+                  title = "empleador hombres",
+                  plotlyOutput("plot_empleadores_hombres")
+                ),
+                box(
+                  title = "empleadoras mujeres",
+                  plotlyOutput("plot_empleadoras_mujeres"),
+                  gt_output("tabla_empleadoras_mujeres")
+                )
+              )
+      ),
+      tabItem(tabName = "Libertades",
+              fluidRow(
+                box(
+                  title = "libertad_humana",
+                  plotlyOutput("plot_libertad_humana")
+                ),
+                box(
+                  title = "libertad_personal",
+                  plotlyOutput("plot_libertad_personal")
+                ),
+                box(
+                  title = "libertad_economica",
+                  plotlyOutput("plot_libertad_economica")
+                )
+              )
+      )
+    )
+  )
+)
 
+# Definir el servidor
+server <- function(input, output, session) {
+  
+  observe({
+    updateSelectInput(session, "pais", 
+                      choices = unique(datos_libertad$country))
+  })
+  
+  output$MAPA_COSTA_RICA <- renderLeaflet({
+    leaflet(data = countries) %>%
+      addTiles() %>%
+      addMarkers(lat = ~as.numeric(Latitude), 
+                 lng = ~as.numeric(Longitude), 
+                 popup = ~countries)
+  })
+  
+  generate_plot <- function(dataType, title) {
+    req(input$pais, input$anio)
+    
+    data_filtered <- datos_libertad[datos_libertad$country == input$pais & 
+                                      datos_libertad$anio >= input$anio[1] &
+                                      datos_libertad$anio <= input$anio[2], ]
+    ggplot(data_filtered, aes(x = anio, y = get(dataType))) +
+      geom_line(color = "blue", size = 2) +
+      theme_minimal()
+  }
+  
+  output$plot_empleadores_hombres <- renderPlotly({
+    req(input$pais, input$anio)
+    
+    data_filtered <- datos_empleo_genero[datos_empleo_genero$country == input$pais &
+                                            datos_empleo_genero$anio == input$anio &
+                                            datos_empleo_genero$gender == "hombres", ]
+    
+    plot_ly(data_filtered, x = ~anio, y = ~empleadores_hombres, type = 'scatter', mode = 'lines', color = ~country)
+  })
+  
+  output$plot_empleadoras_mujeres <- renderPlotly({
+    req(input$pais, input$anio)
+    
+    data_filtered <- datos_empleo_genero[datos_empleo_genero$country == input$pais &
+                                            datos_empleo_genero$anio == input$anio &
+                                            datos_empleo_genero$gender == "mujeres", ]
+    
+    plot_ly(data_filtered, x = ~anio, y = ~empleadoras_mujeres, type = 'scatter', mode = 'lines', color = ~country)
+  })
+  
+  # Agregamos la tabla solo con empleadoras mujeres
+  output$tabla_empleadoras_mujeres <- render_gt({
+    req(input$pais, input$anio)
+    
+    data_filtered <- datos_empleo_genero[datos_empleo_genero$country == input$pais &
+                                            datos_empleo_genero$anio == input$anio &
+                                            datos_empleo_genero$gender == "mujeres", ]
+    
+    data_filtered %>% gt() %>% tab_header(title = "Empleadoras Mujeres")
+  })
+  
+  output$plot_libertad_humana <- renderPlotly({
+    generate_plot("libertad_humana_puntaje", "Libertad Humana")
+  })
+  
+  output$plot_libertad_personal <- renderPlotly({
+    generate_plot("libertad_personal_puntaje", "Libertad Personal")
+  })
+  
+  output$plot_libertad_economica <- renderPlotly({
+    generate_plot("libertad_economica_puntaje", "Libertad Económica")
+  })
+}
+
+# Lanzar la aplicación Shiny
+shinyApp(ui, server)
+
+```
 
 
